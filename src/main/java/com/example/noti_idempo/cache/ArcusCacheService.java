@@ -6,6 +6,10 @@ import net.spy.memcached.ArcusClient;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Service;
 
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+
 @Service
 @ConditionalOnBean(ArcusClient.class)
 @RequiredArgsConstructor
@@ -42,5 +46,19 @@ public class ArcusCacheService implements CacheService {
 			log.warn("Arcus 삭제 실패: key={}, error={}", key, e.getMessage());
 		}
 	}
+	
+	@Override
+	public boolean add(String key, int ttlSeconds) {
+		try {
+			Future<Boolean> future = arcusClient.add(key, ttlSeconds, "1");
+			Boolean result = future.get(5, TimeUnit.SECONDS);
+			return result != null && result;
+		} catch (TimeoutException e) {
+			log.warn("Arcus add 타임아웃: key={}", key);
+			return false;
+		} catch (Exception e) {
+			log.warn("Arcus add 실패: key={}, error={}", key, e.getMessage());
+			return false;
+		}
+	}
 }
-

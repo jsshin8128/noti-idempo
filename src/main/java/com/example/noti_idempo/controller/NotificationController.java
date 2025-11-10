@@ -4,6 +4,7 @@ import com.example.noti_idempo.dto.NotificationRequest;
 import com.example.noti_idempo.dto.NotificationResponse;
 import com.example.noti_idempo.service.NotificationService;
 import com.example.noti_idempo.service.NotificationServiceV2;
+import com.example.noti_idempo.service.NotificationServiceV3;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -20,6 +21,9 @@ public class NotificationController {
 	@Autowired(required = false)
 	private NotificationServiceV2 notificationServiceV2;
 	
+	@Autowired(required = false)
+	private NotificationServiceV3 notificationServiceV3;
+	
 	@Value("${notification.service.version:v1}")
 	private String serviceVersion;
 	
@@ -28,7 +32,9 @@ public class NotificationController {
 			@RequestBody NotificationRequest request) {
 		NotificationResponse response;
 		
-		if ("v2".equals(serviceVersion) && notificationServiceV2 != null) {
+		if ("v3".equals(serviceVersion) && notificationServiceV3 != null) {
+			response = notificationServiceV3.sendNotification(request);
+		} else if ("v2".equals(serviceVersion) && notificationServiceV2 != null) {
 			response = notificationServiceV2.sendNotification(request);
 		} else {
 			response = notificationService.sendNotification(request);
@@ -37,4 +43,3 @@ public class NotificationController {
 		return ResponseEntity.ok(response);
 	}
 }
-

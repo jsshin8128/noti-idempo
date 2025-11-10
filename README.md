@@ -13,7 +13,8 @@ src/main/java/com/example/noti_idempo/
 │   └── NotificationRecordRepository.java
 ├── service/
 │   ├── NotificationService.java      # DB 기반
-│   └── NotificationServiceV2.java    # Arcus 캐시 기반
+│   ├── NotificationServiceV2.java    # Arcus 캐시 기반 (exists + set)
+│   └── NotificationServiceV3.java    # Arcus 캐시 기반 (add 연산)
 ├── cache/
 │   ├── CacheService.java
 │   ├── ArcusCacheService.java
@@ -43,6 +44,14 @@ src/main/java/com/example/noti_idempo/
 - **실험 결과**: 단일 인스턴스 환경에서도 Race Condition 발생 확인
 - **문제점**: 캐시 조회(`exists`)와 저장(`set`) 사이에 Race Condition 발생
 - **수평 확장 환경**: 여러 서버가 동시에 요청을 처리하는 상황에서 중복 알림 재발 가능
+
+### 3단계: Arcus add 연산 기반 중복 방지 (Race Condition 해결)
+
+- Arcus의 `add` 연산을 사용한 원자적 처리
+- 키가 존재하지 않을 때만 생성되도록 원자적으로 처리
+- **실험 결과**: 22건 → 3건 (86% 개선)
+- **수평 확장 환경**: 여러 서버가 동시에 요청해도 대부분 중복 방지
+- **한계**: 완전한 해결은 미달 (예상 1건 대비 3건 발생)
 
 ## API
 
@@ -125,31 +134,43 @@ notification.service.version=v2
 ./gradlew test --tests LoadTest
 ```
 
-### Arcus 캐시 기반 테스트
+### Arcus 캐시 기반 테스트 (V2)
 ```bash
 ./gradlew test --tests LoadTestV2
 ```
 
+### Arcus add 연산 기반 테스트 (V3, 수평 확장 환경)
+```bash
+./gradlew test --tests LoadTestV3
+```
+
 테스트 설정:
-- 동시 요청: 200 스레드 × 20회 = 4,000건
-- 사용자 ID: 1~10 순환
+- **V2**: 동시 요청 200 스레드 × 20회 = 4,000건, 사용자 ID 1~10 순환
+- **V3**: 수평 확장 시뮬레이션 5개 서버 × 40건 = 200건, 동일 사용자(1번)
 - 알림 유형: LIKE
 
 ## 성능 비교
 
-| 지표 | DB 기반 | Arcus 캐시 기반 | 비고 |
-|------|---------|-----------------|------|
-| 평균 응답 시간 | 3,200ms | 3,251ms | 거의 동일 |
-| 최대 응답 시간 | 9,432ms | 7,556ms | 약간 개선 |
-| TPS | 60.23 | 59.58 | 거의 동일 |
-| Lock 대기 시간 | 8,842,138ms | 9,032,148ms | 거의 동일 |
-| 중복 발송 | 22건 | 22건 | 동일 (Race Condition) |
+| 지표 | DB 기반 | Arcus 캐시 (V2) | Arcus add (V3) | 비고 |
+|------|---------|-----------------|----------------|------|
+| 평균 응답 시간 | 3,200ms | 3,251ms | 3,009ms | 거의 동일 |
+| 최대 응답 시간 | 9,432ms | 7,556ms | 3,322ms | V3 개선 |
+| TPS | 60.23 | 59.58 | 59.70 | 거의 동일 |
+| Lock 대기 시간 | 8,842,138ms | 9,032,148ms | 401,775ms | V3 대폭 개선 |
+| 중복 발송 | 22건 | 22건 | 3건 | V3 86% 개선 |
 
 **실험 결과 분석:**
+
+**1-2단계 (DB 기반 vs Arcus 캐시 기반):**
 - Arcus 캐시 사용에도 불구하고 DB 기반과 거의 동일한 성능 지표
 - 단일 인스턴스 환경에서도 Race Condition 발생 (22건 중복 발송)
 - 캐시 조회(`exists`)와 저장(`set`) 사이의 시간 간격에서 Race Condition 발생
-- 수평 확장 환경에서는 더욱 심각한 문제가 될 수 있음
+
+**3단계 (Arcus add 연산):**
+- **Race Condition 대폭 개선**: 22건 → 3건 (86% 개선)
+- **수평 확장 안정성 향상**: 여러 서버가 동시에 요청해도 대부분 중복 방지
+- **원자적 연산 효과**: `exists()` + `set()` 방식보다 훨씬 안정적
+- **한계**: 완전한 해결은 미달 (예상 1건 대비 3건 발생)
 
 ## 기술 스택
 

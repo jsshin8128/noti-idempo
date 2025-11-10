@@ -28,7 +28,6 @@ public class ArcusConfig {
 		try {
 			log.info("Arcus 클라이언트 초기화 시작: zookeeper={}, serviceCode={}", zookeeperAddress, serviceCode);
 			
-			// 초기화 재시도 로직
 			int maxRetries = 3;
 			for (int i = 0; i < maxRetries; i++) {
 				try {
@@ -62,4 +61,3 @@ public class ArcusConfig {
 		}
 	}
 }
-
