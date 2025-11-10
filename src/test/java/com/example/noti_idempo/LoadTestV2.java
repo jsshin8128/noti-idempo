@@ -22,8 +22,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@TestPropertySource(properties = {"arcus.enabled=false", "notification.service.version=v1"})
-class LoadTest {
+@TestPropertySource(properties = {"arcus.enabled=true", "notification.service.version=v2"})
+class LoadTestV2 {
 	
 	@LocalServerPort
 	private int port;
@@ -46,7 +46,6 @@ class LoadTest {
 		AtomicInteger duplicateCount = new AtomicInteger(0);
 		AtomicInteger errorCount = new AtomicInteger(0);
 		AtomicInteger timeoutCount = new AtomicInteger(0);
-		AtomicInteger deadlockCount = new AtomicInteger(0);
 		
 		List<Long> responseTimes = new CopyOnWriteArrayList<>();
 		AtomicLong totalWaitTime = new AtomicLong(0);
@@ -97,45 +96,7 @@ class LoadTest {
 						} catch (Exception e) {
 							errorCount.incrementAndGet();
 							String errorMsg = e.getMessage();
-							String exceptionClass = e.getClass().getSimpleName();
-							String fullMessage = e.toString();
-							
-							boolean isDeadlockRelated = false;
-							if (errorMsg != null) {
-								String lowerMsg = errorMsg.toLowerCase();
-								String lowerClass = exceptionClass.toLowerCase();
-								String lowerFull = fullMessage.toLowerCase();
-								
-								isDeadlockRelated = lowerMsg.contains("deadlock") ||
-									lowerMsg.contains("deadlock detected") ||
-									lowerMsg.contains("40001") ||
-									lowerMsg.contains("lock timeout") ||
-									lowerMsg.contains("could not acquire lock") ||
-									lowerMsg.contains("lock wait timeout") ||
-									lowerMsg.contains("timeout trying to lock") ||
-									lowerClass.contains("deadlock") ||
-									lowerFull.contains("deadlock") ||
-									(lowerMsg.contains("timeout") && lowerMsg.contains("lock")) ||
-									(exceptionClass.contains("JdbcSQLException") && lowerMsg.contains("40001"));
-							}
-							
-							Throwable cause = e.getCause();
-							while (cause != null && !isDeadlockRelated) {
-								String causeMsg = cause.getMessage();
-								if (causeMsg != null) {
-									String lowerCauseMsg = causeMsg.toLowerCase();
-									if (lowerCauseMsg.contains("deadlock") || 
-										lowerCauseMsg.contains("40001") ||
-										(lowerCauseMsg.contains("timeout") && lowerCauseMsg.contains("lock"))) {
-										isDeadlockRelated = true;
-									}
-								}
-								cause = cause.getCause();
-							}
-							
-							if (isDeadlockRelated) {
-								deadlockCount.incrementAndGet();
-							} else if (errorMsg != null && (
+							if (errorMsg != null && (
 									errorMsg.contains("timeout") || 
 									errorMsg.contains("Timeout") ||
 									errorMsg.contains("timed out")
@@ -162,7 +123,7 @@ class LoadTest {
 		
 		executor.shutdown();
 		
-		System.out.println("\n=== 부하 테스트 결과 ===");
+		System.out.println("\n=== 부하 테스트 결과 (Arcus 캐시 기반) ===");
 		System.out.println("동시 요청 수 (Thread Count): " + threadCount);
 		System.out.println("스레드당 요청 수: " + requestsPerThread);
 		System.out.println("총 요청 수: " + (threadCount * requestsPerThread));
@@ -170,7 +131,6 @@ class LoadTest {
 		System.out.println("중복 방지: " + duplicateCount.get());
 		System.out.println("에러: " + errorCount.get());
 		System.out.println("타임아웃: " + timeoutCount.get());
-		System.out.println("Deadlock: " + deadlockCount.get());
 		System.out.println("총 소요 시간: " + totalTime + "ms");
 		
 		long maxResponseTime = 0L;
@@ -197,7 +157,7 @@ class LoadTest {
 			System.out.println("최대 응답 시간: " + maxResponseTime + "ms");
 			System.out.println("최소 응답 시간: " + minResponseTime + "ms");
 			System.out.println("1초 이상 걸린 요청 수: " + slowRequests + "건");
-			System.out.println("총 Lock 대기 시간: " + totalWaitTime.get() + "ms");
+			System.out.println("총 대기 시간: " + totalWaitTime.get() + "ms");
 			System.out.println("TPS: " + String.format("%.2f", (threadCount * requestsPerThread * 1000.0 / totalTime)));
 		}
 		
